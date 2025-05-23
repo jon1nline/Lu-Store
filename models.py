@@ -1,5 +1,5 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, Date, func, Enum, JSONB, Numeric
-from sqlalchemy.dialects.postgresql import ARRAY, BIGINT
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, Date, func, Enum, Numeric
+from sqlalchemy.dialects.postgresql import ARRAY, BIGINT, JSONB
 from database import Base
 from enum import Enum as PyEnum
 
@@ -52,6 +52,7 @@ class OrderStatus(PyEnum):
     RETURNED = "devolvido"
 
 class Pedidos(Base):
+    __tablename__ = "orders"
     id = Column(Integer, primary_key=True, index=True)
     order_number = Column(String(20), unique=True, index=True)
     id_cliente = Column(Integer, ForeignKey("clients.id"), nullable=False)
