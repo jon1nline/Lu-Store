@@ -17,12 +17,13 @@ class User(UserBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
-     
+    refresh_token: str 
   
 class TokenData(BaseModel):
     email: str | None = None
 
- 
+class TokenRefresh(BaseModel):
+    refresh_token: str    
 
 class NewUser(BaseModel):
    email: str

@@ -7,10 +7,10 @@ from database import engine, SessionLocal
 from sqlalchemy.orm import Session
 from auth import (
     get_current_user,
-    get_current_active_user,
-    get_current_superuser,
     authenticate_user,
     create_access_token,
+    create_refresh_token,
+    verify_refresh_token,
     get_password_hash,
     SECRET_KEY,
     ALGORITHM,
@@ -20,10 +20,6 @@ from auth import (
  
 app = FastAPI()
 models.Base.metadata.create_all(bind=engine)
-
-
-
-
 
 
 db_dependency = Annotated[Session, Depends(get_db)]
@@ -54,12 +50,36 @@ def login_for_access_token(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+    access_token = create_access_token(data={"sub": user.email})
+    refresh_token = create_refresh_token(data={"sub": user.email})
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "refresh_token": refresh_token
+    }
 
 @app.post("/auth/refresh-token")
-async def root():
-    return {"message": "will be activated after auth/login"}
+async def refresh_token(refresh_data: schemas.TokenRefresh):
+    payload = verify_refresh_token(refresh_data.refresh_token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+        )
+    
+    user_email = payload.get("sub")
+    if not user_email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        )
+    
+    
+    new_access_token = create_access_token(data={"sub": user_email})
+    new_refresh_token = create_refresh_token(data={"sub": user_email})
+    
+    return {
+        "access_token": new_access_token,
+        "token_type": "bearer",
+        "refresh_token": new_refresh_token
+    }

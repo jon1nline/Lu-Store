@@ -8,3 +8,5 @@
 
 3rd commit - user authentication created
        -after registration, the user can finally login
+
+4th commit - JWT refresh token activated.
