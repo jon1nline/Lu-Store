@@ -1,6 +1,7 @@
-from pydantic import BaseModel, EmailStr, validator 
-from typing import Optional
+from pydantic import BaseModel, EmailStr, validator, Field, field_validator
+from typing import Optional, Union, Annotated
 import re
+from datetime import datetime
 
 class UserBase(BaseModel): #checa 
     email: EmailStr
@@ -44,6 +45,7 @@ class ClientBase(BaseModel):
     phone: str
     address: str | None = None
     company: str
+    last_update: datetime
 
 class ClientCreate(ClientBase):
     cpf: str
@@ -67,3 +69,46 @@ class Client(ClientBase):
     
     class Config:
         from_attributes = True   
+
+class ProductBase(BaseModel):
+    name:str = Field(..., max_length=100)
+    desc: str = Field(..., max_length=200)
+    category: str = Field(..., max_length=50)
+    barcode: Annotated[str, Field(min_length=8, max_length=13, pattern=r'^\d+$')]
+    sales_price: int
+    stock: int 
+    expiry_date: Optional[Union[datetime, str]] = None
+    image_URL: Optional[str] = None  
+
+    @field_validator('expiry_date', mode='before')
+    def empty_string_to_none(cls, v):
+        if v == "":
+            return None
+        return v 
+    
+    @field_validator('barcode')
+    def validate_barcode(cls, v):
+        if not v.isdigit():
+            raise ValueError('O código de barras deve conter apenas números')
+        if len(v) not in (8, 12, 13, 14):  # Padrões comuns EAN-8, UPC-A, EAN-13, GS1-14
+            raise ValueError('Tamanho inválido para código de barras')
+        return v
+
+class ProductCreate(ProductBase):
+    pass
+
+class Product(ProductBase):
+    id: int
+    is_active: bool
+    last_update: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+class ProductUpdate(BaseModel):
+    desc: Optional[str] = Field(None, max_length=200)
+    sales_price: Optional[int] = Field(None, ge=0)
+    stock: Optional[int] = Field(None, ge=0)
+    expiry_date: Optional[datetime] = None
+    is_active: Optional[bool] = None  
+    image_URL: Optional[str] = None    

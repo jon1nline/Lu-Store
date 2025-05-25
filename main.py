@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from auth import (
     get_current_user,
     get_current_active_user,
+    get_current_superuser,
     authenticate_user,
     create_access_token,
     create_refresh_token,
@@ -62,7 +63,7 @@ def login_for_access_token(email: str, password: str, db: Session = Depends(get_
     }
 
 @app.post("/token",response_model=schemas.Token)
-def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: db_dependency):
+def login_swaggerUI(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], db: db_dependency):
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -102,8 +103,9 @@ async def refresh_token(refresh_data: schemas.TokenRefresh):
         "refresh_token": new_refresh_token
     }
 
-##iniciando o cadastro e exibição de clientes
+#Cadastro, exibição, edição e exclusão de clientes.
 
+#Faz cadastro de novo cliente.
 @app.post("/clients")
 async def create_client(
     client: schemas.ClientCreate,
@@ -165,15 +167,8 @@ async def update_client(
     client_id: int,
     client: schemas.ClientCreate,
     db: Session = Depends(get_db),
-    current_user: models.Users = Depends(get_current_active_user)  
+    current_user: models.Users = Depends(get_current_superuser)  
 ):
-    # Faz a verificação de super usuário.
-    if not current_user.is_superuser:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Somente superusuários podem atualizar clientes"
-        )
-    
     db_client = db.query(models.Clients).filter(models.Clients.id == client_id).first()
     if not db_client:
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
@@ -202,14 +197,8 @@ async def update_client(
 async def delete_client(
     client_id: int,
     db: Session = Depends(get_db),
-    current_user: models.Users = Depends(get_current_active_user)
+    current_user: models.Users = Depends(get_current_superuser)
 ):
-    #faz a verificação de superuser para excluir o cliente.
-    if not current_user.is_superuser:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Somente superusuários podem desativar clientes."
-        )
     db_client = db.query(models.Clients).filter(models.Clients.id == client_id).first()
     if not db_client:
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
@@ -219,3 +208,105 @@ async def delete_client(
     db.commit()
     
     return {"message": "Cliente desativado com sucesso"}
+
+
+#Cadastro, exibição, edição e exclusão de PRODUTOS
+
+#Rota para adicionar produto
+@app.post("/products", response_model=schemas.Product, status_code=status.HTTP_201_CREATED)
+async def create_product(
+    product: schemas.ProductCreate,
+    db: Session = Depends(get_db),
+    current_user: models.Users = Depends(get_current_superuser)
+):
+    
+    product_data = product.model_dump()
+    if product_data.get('expiry_date') == "":
+        product_data['expiry_date'] = None
+
+    
+    # Verifica se código de barras já existe
+    db_product = db.query(models.Products).filter(models.Products.barcode == product.barcode).first()
+    if db_product:
+        raise HTTPException(status_code=400, detail="Código de barras já cadastrado")
+    
+    db_product = models.Products(**product.model_dump())
+    db.add(db_product)
+    db.commit()
+    db.refresh(db_product)
+    return db_product
+
+#rota para exibir produtos com paginação e filtros
+@app.get("/products", response_model=List[schemas.Product])
+async def list_products(
+    db: Session = Depends(get_db),
+    skip: int = 0,
+    limit: int = 100,
+    category: Optional[str] = Query(None),
+    min_price: Optional[float] = Query(None, gt=0),
+    max_price: Optional[float] = Query(None, gt=0),
+    in_stock: Optional[bool] = Query(None)
+):
+    query = db.query(models.Products)
+    
+    if category:
+        query = query.filter(models.Products.category == category)
+    if min_price:
+        query = query.filter(models.Products.sale_price >= min_price)
+    if max_price:
+        query = query.filter(models.Products.sale_price <= max_price)
+    if in_stock is not None:
+        if in_stock:
+            query = query.filter(models.Products.stock > 0)
+        else:
+            query = query.filter(models.Products.stock <= 0)
+    
+    products = query.offset(skip).limit(limit).all()
+    return products
+
+
+#rota para exibir produto especifico
+@app.get("/products/{product_id}", response_model=schemas.Product)
+async def get_product(
+    product_id: int,
+    db: Session = Depends(get_db)
+):
+    db_product = db.query(models.Products).filter(models.Products.id == product_id).first()
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+    return db_product
+
+# iv. Atualizar produto
+@app.put("/products/{product_id}", response_model=schemas.Product)
+async def update_product(
+    product_id: int,
+    product: schemas.ProductUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.Users = Depends(get_current_superuser)
+):
+    db_product = db.query(models.Products).filter(models.Products.id == product_id).first()
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+    
+    update_data = product.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_product, field, value)
+    
+    db.commit()
+    db.refresh(db_product)
+    return db_product
+
+# v. Excluir produto (soft delete)
+@app.delete("/products/{product_id}")
+async def delete_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.Users = Depends(get_current_superuser)
+):
+    db_product = db.query(models.Products).filter(models.Products.id == product_id).first()
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+    
+    db_product.is_active = False
+    db.commit()
+    return {"message": "Produto desativado com sucesso"}
