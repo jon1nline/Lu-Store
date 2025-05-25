@@ -2,7 +2,11 @@ from pydantic import BaseModel, EmailStr, validator, Field, field_validator
 from typing import Optional, Union, Annotated
 import re
 from datetime import datetime
+from enum import Enum as PyEnum
+from typing import List
 
+
+#schemas para Users
 class UserBase(BaseModel): #checa 
     email: EmailStr
     name: str
@@ -45,7 +49,7 @@ class ClientBase(BaseModel):
     phone: str
     address: str | None = None
     company: str
-    last_update: datetime
+    
 
 class ClientCreate(ClientBase):
     cpf: str
@@ -76,7 +80,7 @@ class ProductBase(BaseModel):
     category: str = Field(..., max_length=50)
     barcode: Annotated[str, Field(min_length=8, max_length=13, pattern=r'^\d+$')]
     sales_price: int
-    stock: int 
+    is_active: bool
     expiry_date: Optional[Union[datetime, str]] = None
     image_URL: Optional[str] = None  
 
@@ -111,4 +115,48 @@ class ProductUpdate(BaseModel):
     stock: Optional[int] = Field(None, ge=0)
     expiry_date: Optional[datetime] = None
     is_active: Optional[bool] = None  
-    image_URL: Optional[str] = None    
+    image_URL: Optional[str] = None   
+    @field_validator('expiry_date', mode='before')
+    def empty_string_to_none(cls, v):
+        if v == "":
+            return None
+        return v 
+
+##aqui termina clients e inicia pedidos.
+
+class OrderStatusEnum(str, PyEnum):
+    PENDING = "pendente"
+    PROCESSING = "processando"
+    SHIPPED = "enviado"
+    DELIVERED = "entregue"
+    CANCELLED = "cancelado"
+
+class OrderItemCreate(BaseModel):
+    product_id: int
+    quantity: int = Field(..., gt=0)
+
+class OrderCreate(BaseModel):
+    client_id: int
+    items: List[OrderItemCreate] = Field(..., min_items=1)
+    status: OrderStatusEnum 
+
+class OrderItemResponse(BaseModel):
+    product_id: int
+    quantity: int
+    unit_price: float
+
+    
+
+class OrderResponse(BaseModel):
+    id: int
+    client_id: int
+    status: OrderStatusEnum
+    created_at: datetime
+    total_amount: float
+    items: List[OrderItemResponse]
+    
+    class Config:
+        from_attributes = True
+
+class OrderUpdate(BaseModel):
+    status: Optional[OrderStatusEnum] = None 

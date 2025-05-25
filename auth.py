@@ -4,28 +4,31 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from typing import Annotated
-from schemas import TokenData
+from schemas import TokenData, OrderStatusEnum
 from models import Users
 from sqlalchemy.orm import Session
 from database import engine, SessionLocal
-from models import Users
+from models import Users, OrderStatus
+from fastapi import HTTPException
 
 # Configurações
-SECRET_KEY = "sua-chave-secreta-super-segura-aqui"
+SECRET_KEY = "sua-chave-secreta-super-segura-aqui" #chave não incluida no github por motivo de segurança
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
-REFRESH_SECRET_KEY = "sua-chave-secreta-refresh"  # Use uma chave diferente da secretkey inicial
+REFRESH_SECRET_KEY = "sua-chave-secreta-refresh"  #chave não incluida no github por motivo de segurança
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 def get_db():
-   db = SessionLocal()
-   try:
-     yield db
-   finally:
-     db.close()
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        if db.in_transaction():
+            db.rollback()  # Limpeza segura
+        db.close()
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -106,10 +109,44 @@ async def get_current_superuser(
     current_user: Users = Depends(get_current_user)
 ):
     if not current_user.is_active:
-        raise HTTPException(status_code=403, detail="Inactive user")
+        raise HTTPException(status_code=403, detail="Essa conta está desativada e não pode realizar ações.")
     if not current_user.is_superuser:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="The user doesn't have enough privileges"
         )
     return current_user
+#função que garante que o status está correto e não causará exception.
+def convert_order_status(api_status: OrderStatusEnum) -> OrderStatus:
+    try:
+        status_mapping = {
+            OrderStatusEnum.PENDING: OrderStatus.PENDING,
+            OrderStatusEnum.PROCESSING: OrderStatus.PROCESSING,
+            OrderStatusEnum.SHIPPED: OrderStatus.SHIPPED,
+            OrderStatusEnum.DELIVERED: OrderStatus.DELIVERED,
+            OrderStatusEnum.CANCELLED: OrderStatus.CANCELLED
+        }
+        return status_mapping[api_status]
+    except KeyError:
+        valid_values = [e.value for e in OrderStatus]
+        raise HTTPException(
+            status_code=400,
+            detail=f"Status inválido. Valores permitidos: {valid_values}"
+        )
+    
+def reverse_order_status(api_status: OrderStatus) -> OrderStatusEnum :
+    try:
+        status_mapping = {
+            OrderStatus.PENDING: OrderStatusEnum.PENDING,
+            OrderStatus.PROCESSING: OrderStatusEnum.PROCESSING,
+            OrderStatus.SHIPPED: OrderStatusEnum.SHIPPED,
+            OrderStatus.DELIVERED: OrderStatusEnum.DELIVERED,
+            OrderStatus.CANCELLED: OrderStatusEnum.CANCELLED
+        }
+        return status_mapping[api_status]
+    except KeyError:
+        valid_values = [e.value for e in OrderStatus]
+        raise HTTPException(
+            status_code=400,
+            detail=f"Status inválido. Valores permitidos: {valid_values}"
+        )    
