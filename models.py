@@ -18,12 +18,12 @@ class Clients(Base):
     __tablename__ = "clients"
 
     id = Column(Integer, primary_key=True, index=True)
-    nome = Column(String(100), nullable=False)
+    name = Column(String(100), nullable=False)
     email = Column(String(255), unique=True, index=True)
     cpf = Column(String(14), unique=True, index=True) #Formato é 000.000.000-00
-    telefone = Column(String(20))
-    empresa = Column(String(100))
-    endereco = Column(String(200))
+    phone = Column(String(20))
+    company = Column(String(100))
+    address = Column(String(200))
     is_active = Column(Boolean, default=True)
     last_update = Column(DateTime(timezone=True), onupdate=func.now())
 
