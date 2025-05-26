@@ -22,6 +22,12 @@ _*ENG*_
 - `Orders`: creates, displays, filters and deletes orders
 
 
+
+# Docker deploy
+- `Deploy:` https://lu-store.onrender.com/docs
+- `superuser:` teste@teste.com | password: 1234
+
+
 _*PTBR*_
 # Referencias:
 
